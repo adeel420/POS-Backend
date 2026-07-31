@@ -1,7 +1,8 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/userModel");
 require("dotenv").config();
 
-const jwtAuthMiddleware = (req, res, next) => {
+const jwtAuthMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.header("Authorization");
     if (!authHeader) {
@@ -19,7 +20,21 @@ const jwtAuthMiddleware = (req, res, next) => {
       return res.status(401).json({ error: "Invalid token payload" });
     }
 
-    req.user = { id: verified.id };
+    const user = await User.findById(verified.id).select(
+      "-password -verificationCode -resetPasswordOTP -resetPasswordExpires"
+    );
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
+    }
+
+    const tenantId =
+      user.role === "cashier" && user.ownerId ? user.ownerId.toString() : user._id.toString();
+
+    req.user = {
+      id: tenantId,
+      userId: user._id.toString(),
+      role: user.role,
+    };
     next();
   } catch (error) {
     return res.status(401).json({ error: "Invalid or expired token" });

@@ -1,5 +1,13 @@
 const mongoose = require("mongoose");
 
+const variantSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    price: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
 const menuItemSchema = new mongoose.Schema(
   {
     userId: {
@@ -10,7 +18,8 @@ const menuItemSchema = new mongoose.Schema(
     name: { type: String, required: true },
     category: { type: String, required: true },
     price: { type: Number, required: true, min: 0 },
-    variants: { type: [String], default: [] },
+    variants: { type: [variantSchema], default: [] },
+    available: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

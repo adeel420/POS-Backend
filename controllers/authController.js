@@ -34,6 +34,7 @@ const signup = async (req, res) => {
       phone: phone || "",
       businessType,
       verificationCode,
+      role: "admin",
     });
 
     await user.save();
@@ -87,6 +88,7 @@ const login = async (req, res) => {
         email: user.email,
         businessName: user.businessName,
         businessType: user.businessType,
+        role: user.role,
       },
     });
   } catch (err) {
@@ -210,9 +212,100 @@ const getLoginData = async (req, res) => {
       businessName: user.businessName,
       phone: user.phone,
       businessType: user.businessType,
+      role: user.role,
     });
   } catch (err) {
     console.error("Login Data Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const getCashiers = async (req, res) => {
+  try {
+    const cashiers = await User.find({ ownerId: req.user.id, role: "cashier" }).select(
+      "-password -verificationCode -resetPasswordOTP -resetPasswordExpires"
+    );
+    res.status(200).json(
+      cashiers.map((c) => ({
+        id: c._id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        role: c.role,
+        createdAt: c.createdAt,
+      }))
+    );
+  } catch (err) {
+    console.error("Get Cashiers Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const addCashier = async (req, res) => {
+  try {
+    const { name, email, password, phone } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Name, email and password are required" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return res.status(400).json({ error: "Email already exists" });
+    }
+
+    const admin = await User.findById(req.user.id);
+    if (!admin) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    const cashier = new User({
+      name,
+      email,
+      password,
+      phone: phone || "",
+      businessName: admin.businessName,
+      businessType: admin.businessType,
+      role: "cashier",
+      ownerId: admin._id,
+      isVerified: true,
+    });
+
+    await cashier.save();
+
+    res.status(201).json({
+      message: "Cashier created successfully",
+      cashier: {
+        id: cashier._id,
+        name: cashier.name,
+        email: cashier.email,
+        phone: cashier.phone,
+        role: cashier.role,
+        createdAt: cashier.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("Add Cashier Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const deleteCashier = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const cashier = await User.findOneAndDelete({ _id: id, ownerId: req.user.id, role: "cashier" });
+    if (!cashier) {
+      return res.status(404).json({ error: "Cashier not found" });
+    }
+
+    res.status(200).json({ message: "Cashier deleted successfully" });
+  } catch (err) {
+    console.error("Delete Cashier Error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -224,4 +317,7 @@ module.exports = {
   forgotPassword,
   resetPassword,
   getLoginData,
+  getCashiers,
+  addCashier,
+  deleteCashier,
 };

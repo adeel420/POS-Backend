@@ -1,5 +1,15 @@
 const MenuItem = require("../models/menuModel");
 
+const normalizeVariants = (variants) =>
+  Array.isArray(variants)
+    ? variants
+        .map((v) => ({
+          name: String(v.name || "").trim(),
+          price: Number(v.price),
+        }))
+        .filter((v) => v.name && v.price >= 0)
+    : [];
+
 const getMenuItems = async (req, res) => {
   try {
     const items = await MenuItem.find({ userId: req.user.id }).sort({ createdAt: 1 });
@@ -12,7 +22,7 @@ const getMenuItems = async (req, res) => {
 
 const addMenuItem = async (req, res) => {
   try {
-    const { name, category, price, variants } = req.body;
+    const { name, category, price, variants, available } = req.body;
 
     if (!name || !category || price === undefined || price === null) {
       return res.status(400).json({ error: "Item name, category and price are required" });
@@ -28,7 +38,8 @@ const addMenuItem = async (req, res) => {
       name,
       category,
       price,
-      variants: Array.isArray(variants) ? variants : [],
+      variants: normalizeVariants(variants),
+      available: available === undefined ? true : Boolean(available),
     });
     await item.save();
     res.status(201).json(item);
@@ -45,6 +56,10 @@ const updateMenuItem = async (req, res) => {
 
     if (updates.variants && !Array.isArray(updates.variants)) {
       return res.status(400).json({ error: "Variants must be an array" });
+    }
+
+    if (updates.variants) {
+      updates.variants = normalizeVariants(updates.variants);
     }
 
     const item = await MenuItem.findOneAndUpdate(

@@ -17,6 +17,16 @@ const userSchema = new mongoose.Schema(
     verificationCode: String,
     resetPasswordOTP: String,
     resetPasswordExpires: Date,
+    role: {
+      type: String,
+      enum: ["admin", "cashier"],
+      default: "admin",
+    },
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   { timestamps: true }
 );
