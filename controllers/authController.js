@@ -1,7 +1,9 @@
 const bcrypt = require("bcrypt");
 const User = require("../models/userModel");
-const { sendVerificationCode, welcomeCode } = require("../middleware/email");
+const Plan = require("../models/planModel");
+const { sendVerificationCode, welcomeCode, sendAccountApproved, sendAccountRejected } = require("../middleware/email");
 const { generateToken } = require("../middleware/jwt");
+const { uploadToCloudinary } = require("../middleware/upload");
 
 const signup = async (req, res) => {
   try {
@@ -35,6 +37,7 @@ const signup = async (req, res) => {
       businessType,
       verificationCode,
       role: "admin",
+      accountStatus: "pending",
     });
 
     await user.save();
@@ -72,6 +75,14 @@ const login = async (req, res) => {
       return res.status(400).json({ error: "Please verify your email first" });
     }
 
+    if (user.role === "admin" && user.accountStatus === "pending") {
+      return res.status(400).json({ error: "Your account is pending approval. Please wait for admin approval." });
+    }
+
+    if (user.role === "admin" && user.accountStatus === "rejected") {
+      return res.status(400).json({ error: `Your account has been rejected. Reason: ${user.rejectionReason || "Contact support"}` });
+    }
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(400).json({ error: "Invalid email or password" });
@@ -89,6 +100,7 @@ const login = async (req, res) => {
         businessName: user.businessName,
         businessType: user.businessType,
         role: user.role,
+        accountStatus: user.accountStatus,
       },
     });
   } catch (err) {
@@ -116,9 +128,135 @@ const verifyEmail = async (req, res) => {
 
     await welcomeCode(user.email, user.name);
 
-    res.status(200).json({ message: "Email verified successfully" });
+    res.status(200).json({
+      message: "Email verified successfully",
+      accountStatus: user.accountStatus,
+    });
   } catch (err) {
     console.error("Verification Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const selectPlan = async (req, res) => {
+  try {
+    const { planId } = req.body;
+    const userId = req.user.id;
+
+    if (!planId) {
+      return res.status(400).json({ error: "Plan ID is required" });
+    }
+
+    const plan = await Plan.findById(planId);
+    if (!plan || !plan.isActive) {
+      return res.status(400).json({ error: "Invalid or inactive plan" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { selectedPlan: planId },
+      { new: true }
+    ).select("-password -verificationCode -resetPasswordOTP -resetPasswordExpires");
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.status(200).json({ message: "Plan selected successfully", user });
+  } catch (err) {
+    console.error("Select Plan Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const uploadPaymentProof = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Payment proof image is required" });
+    }
+
+    const result = await uploadToCloudinary(req.file);
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { paymentProof: result.secure_url, accountStatus: "pending" },
+      { new: true }
+    ).select("-password -verificationCode -resetPasswordOTP -resetPasswordExpires");
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.status(200).json({ message: "Payment proof uploaded successfully", user });
+  } catch (err) {
+    console.error("Upload Payment Proof Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const approveTenant = async (req, res) => {
+  try {
+    const tenant = await User.findById(req.params.id);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    tenant.accountStatus = "approved";
+    tenant.rejectionReason = "";
+    await tenant.save();
+
+    try {
+      await sendAccountApproved(tenant.email, tenant.name);
+    } catch (emailErr) {
+      console.error("Approval email failed:", emailErr.message);
+    }
+
+    const updated = await User.findById(req.params.id).select(
+      "-password -verificationCode -resetPasswordOTP -resetPasswordExpires"
+    );
+
+    res.status(200).json({ message: "Tenant approved successfully", tenant: updated });
+  } catch (err) {
+    console.error("Approve Tenant Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const rejectTenant = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const tenant = await User.findById(req.params.id);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    tenant.accountStatus = "rejected";
+    tenant.rejectionReason = reason || "";
+    await tenant.save();
+
+    try {
+      await sendAccountRejected(tenant.email, tenant.name, reason);
+    } catch (emailErr) {
+      console.error("Rejection email failed:", emailErr.message);
+    }
+
+    const updated = await User.findById(req.params.id).select(
+      "-password -verificationCode -resetPasswordOTP -resetPasswordExpires"
+    );
+
+    res.status(200).json({ message: "Tenant rejected", tenant: updated });
+  } catch (err) {
+    console.error("Reject Tenant Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const getPendingTenants = async (req, res) => {
+  try {
+    const tenants = await User.find({ role: "admin", accountStatus: "pending" })
+      .select("-password -verificationCode -resetPasswordOTP -resetPasswordExpires")
+      .populate("selectedPlan", "name price");
+    res.status(200).json(tenants);
+  } catch (err) {
+    console.error("Get Pending Tenants Error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -200,7 +338,9 @@ const getLoginData = async (req, res) => {
       return res.status(400).json({ error: "User ID is missing" });
     }
 
-    const user = await User.findById(userId).select("-password -verificationCode -resetPasswordOTP -resetPasswordExpires");
+    const user = await User.findById(userId)
+      .select("-password -verificationCode -resetPasswordOTP -resetPasswordExpires")
+      .populate("selectedPlan", "name price color features");
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -213,6 +353,9 @@ const getLoginData = async (req, res) => {
       phone: user.phone,
       businessType: user.businessType,
       role: user.role,
+      accountStatus: user.accountStatus,
+      selectedPlan: user.selectedPlan,
+      paymentProof: user.paymentProof,
     });
   } catch (err) {
     console.error("Login Data Error:", err);
@@ -273,6 +416,7 @@ const addCashier = async (req, res) => {
       role: "cashier",
       ownerId: admin._id,
       isVerified: true,
+      accountStatus: "approved",
     });
 
     await cashier.save();
@@ -310,14 +454,53 @@ const deleteCashier = async (req, res) => {
   }
 };
 
+const getTenants = async (req, res) => {
+  try {
+    const tenants = await User.find({ role: "admin" })
+      .select("-password -verificationCode -resetPasswordOTP -resetPasswordExpires")
+      .populate("selectedPlan", "name price");
+    res.status(200).json(tenants);
+  } catch (err) {
+    console.error("Get Tenants Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const updateTenantStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ["Active", "Inactive", "Trial"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
+    const tenant = await User.findByIdAndUpdate(
+      req.params.id,
+      { tenantStatus: status },
+      { new: true }
+    ).select("-password -verificationCode -resetPasswordOTP -resetPasswordExpires");
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+    res.status(200).json(tenant);
+  } catch (err) {
+    console.error("Update Tenant Status Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 module.exports = {
   signup,
   login,
   verifyEmail,
+  selectPlan,
+  uploadPaymentProof,
+  approveTenant,
+  rejectTenant,
+  getPendingTenants,
   forgotPassword,
   resetPassword,
   getLoginData,
   getCashiers,
   addCashier,
   deleteCashier,
+  getTenants,
+  updateTenantStatus,
 };

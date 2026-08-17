@@ -168,4 +168,72 @@ const Welcome_Email_Template = `
   </body>
   </html>
 `;
-module.exports = { Verification_Email_Template, Welcome_Email_Template };
+const Account_Approved_Template = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Account Approved</title>
+      <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+          .container { max-width: 600px; margin: 30px auto; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid #ddd; }
+          .header { background-color: #22c55e; color: white; padding: 20px; text-align: center; font-size: 26px; font-weight: bold; }
+          .content { padding: 25px; color: #333; line-height: 1.8; }
+          .button { display: inline-block; padding: 12px 25px; margin: 20px 0; background-color: #22c55e; color: white; text-decoration: none; border-radius: 5px; text-align: center; font-size: 16px; font-weight: bold; }
+          .footer { background-color: #f4f4f4; padding: 15px; text-align: center; color: #777; font-size: 12px; border-top: 1px solid #ddd; }
+          p { margin: 0 0 15px; }
+      </style>
+  </head>
+  <body>
+      <div class="container">
+          <div class="header">Account Approved!</div>
+          <div class="content">
+              <p>Hello {name},</p>
+              <p>Great news! Your account has been <strong>approved</strong> by our team. You can now log in and start using MultiPOS.</p>
+              <a href="{loginUrl}" class="button">Login Now</a>
+              <p>If you have any questions, feel free to reach out to our support team.</p>
+          </div>
+          <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} MultiPOS. All rights reserved.</p>
+          </div>
+      </div>
+  </body>
+  </html>
+`;
+
+const Account_Rejected_Template = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Account Rejected</title>
+      <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+          .container { max-width: 600px; margin: 30px auto; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid #ddd; }
+          .header { background-color: #ef4444; color: white; padding: 20px; text-align: center; font-size: 26px; font-weight: bold; }
+          .content { padding: 25px; color: #333; line-height: 1.8; }
+          .reason-box { background: #fef2f2; border: 1px dashed #ef4444; padding: 12px; border-radius: 5px; margin: 15px 0; color: #dc2626; font-weight: bold; }
+          .footer { background-color: #f4f4f4; padding: 15px; text-align: center; color: #777; font-size: 12px; border-top: 1px solid #ddd; }
+          p { margin: 0 0 15px; }
+      </style>
+  </head>
+  <body>
+      <div class="container">
+          <div class="header">Account Rejected</div>
+          <div class="content">
+              <p>Hello {name},</p>
+              <p>We regret to inform you that your account has been <strong>rejected</strong> by our team.</p>
+              <div class="reason-box">Reason: {reason}</div>
+              <p>If you believe this was a mistake, please contact our support team for assistance.</p>
+          </div>
+          <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} MultiPOS. All rights reserved.</p>
+          </div>
+      </div>
+  </body>
+  </html>
+`;
+
+module.exports = { Verification_Email_Template, Welcome_Email_Template, Account_Approved_Template, Account_Rejected_Template };

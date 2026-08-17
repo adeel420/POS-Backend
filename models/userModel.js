@@ -19,14 +19,31 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpires: Date,
     role: {
       type: String,
-      enum: ["admin", "cashier"],
+      enum: ["superadmin", "admin", "cashier"],
       default: "admin",
+    },
+    tenantStatus: {
+      type: String,
+      enum: ["Active", "Inactive", "Trial"],
+      default: "Active",
     },
     ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
+    accountStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+    selectedPlan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Plan",
+      default: null,
+    },
+    paymentProof: { type: String, default: "" },
+    rejectionReason: { type: String, default: "" },
   },
   { timestamps: true }
 );
